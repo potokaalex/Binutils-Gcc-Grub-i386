@@ -1,0 +1,91 @@
+#Args
+TargetArch := .
+Version := .
+SourcesDir := .
+ResultDir := .
+URL := .
+Target := .
+CompressionFormat := .
+
+SourceFolder := $(SourcesDir)/$(Version)
+ResultFolder := $(ResultDir)/$(Version)-$(TargetArch)
+Configuration := $(SourceFolder)/configure
+PreBuildFolder := $(SourceFolder)/$(TargetArch)-preBuild
+PathString := PATH="$(ResultFolder)/bin:$$PATH"
+
+Binutils1:
+	cd $(PreBuildFolder) && make
+	cd $(PreBuildFolder) && make install
+
+Gcc1:
+	cd $(PreBuildFolder) && make all-gcc
+	cd $(PreBuildFolder) && make install-gcc
+	cd $(PreBuildFolder) && make all-target-libgcc
+	cd $(PreBuildFolder) && make install-target-libgcc
+
+Grub1:
+	cd $(PreBuildFolder) && make install
+
+Binutils2:
+	cd $(PreBuildFolder) && ../configure \
+		--prefix=$(ResultFolder) \
+		--target=$(TargetArch) \
+		--disable-multilib \
+		--disable-nls \
+		--disable-werror
+
+Gcc2:
+	cd $(PreBuildFolder) && ../configure \
+		--prefix=$(ResultFolder) \
+		--target=$(TargetArch) \
+		--disable-multilib \
+		--disable-nls \
+		--disable-werror \
+		--without-headers \
+		--without-is1 \
+		--enable-languages=c,c++
+
+Grub2:
+		cd $(PreBuildFolder) && ../configure \
+		--prefix=$(ResultFolder) \
+		--target=$(TargetArch) \
+		--disable-nls \
+		--disable-werror \
+		--disable-efiemu \
+		TARGET_CC=$(TargetArch)-gcc \
+		TARGET_NM=$(TargetArch)-nm \
+		TARGET_OBJCOPY=$(TargetArch)-objcopy \
+		TARGET_RANLIB=$(TargetArch)-ranlib \
+		TARGET_STRIP=$(TargetArch)-strip
+
+all: $(PreBuildFolder)/Makefile
+	$(MAKE) $(Target)1 -f CommonMakefile
+
+$(PreBuildFolder)/Makefile: $(Configuration)
+	mkdir -p $(PreBuildFolder)
+	$(MAKE) -f CommonMakefile pathRegister
+	$(MAKE) $(Target)2 -f CommonMakefile
+
+$(Configuration): $(SourceFolder).tar.$(CompressionFormat)
+	tar -C $(SourcesDir) -xf $(SourceFolder).tar.$(CompressionFormat)
+	touch $(Configuration)
+
+$(SourceFolder).tar.$(CompressionFormat):
+	mkdir -p $(SourcesDir)
+	wget -P $(SourcesDir) $(URL)
+
+pathRegister:
+	echo 'export $(PathString)' >> ~/.bashrc
+
+pathUnregister:
+	sed -i '\#export $(PathString)#d' ~/.bashrc
+
+clear: pathUnregister
+	rm -rf $(SourceFolder).tar.$(CompressionFormat)
+	rm -rf $(SourceFolder)
+	rm -rf $(ResultFolder)
+
+copy: $(Version)-$(TargetArch).tar.xz
+	mkdir -p $(ResultFolder)
+	tar -C $(ResultFolder) -xf $(Version)-$(TargetArch).tar.xz
+	$(MAKE) -f CommonMakefile pathRegister
